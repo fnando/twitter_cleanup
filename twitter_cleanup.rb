@@ -43,7 +43,7 @@ class TwitterCleanup
       count: 3200,
       trim_user: true,
       include_rts: true,
-      exclude_replies: true
+      exclude_replies: false
     }.tap do |options|
       options[:max_id] = tweet_ids.min if tweet_ids.any?
     end
