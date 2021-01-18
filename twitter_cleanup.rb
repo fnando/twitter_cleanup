@@ -13,7 +13,7 @@ class TwitterCleanup
   end
 
   def tweet_ttl
-    @tweet_ttl ||= ENV.fetch("TWEET_TTL", YEAR_IN_SECONDS)
+    @tweet_ttl ||= Integer(ENV.fetch("TWEET_TTL", YEAR_IN_SECONDS))
   end
 
   def client
