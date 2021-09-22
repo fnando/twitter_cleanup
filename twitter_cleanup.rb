@@ -6,11 +6,7 @@ require "json"
 require "twitter"
 
 class TwitterCleanup
-  YEAR_IN_SECONDS = 86_400 * 365
-
-  def keybase_verification_id
-    ENV["KEYBASE_VERIFICATION_ID"]
-  end
+  YEAR_IN_SECONDS = 86_400 * 366
 
   def tweet_ttl
     @tweet_ttl ||= Integer(ENV.fetch("TWEET_TTL", YEAR_IN_SECONDS))
@@ -32,6 +28,7 @@ class TwitterCleanup
   def destroy(id)
     client.destroy_status(id)
   rescue Twitter::Error::TooManyRequests => error
+    time = error.rate_limit.reset_in + 1
     puts "=> Error: too many requests (wait #{time}s)"
 
     sleep error.rate_limit.reset_in + 1
@@ -65,6 +62,8 @@ class TwitterCleanup
   end
 
   def call
+    process_favorites
+
     loop do
       tweets = timeline.reject {|tweet| tweet_ids.include?(tweet.id) }
 
@@ -81,10 +80,28 @@ class TwitterCleanup
     retry
   end
 
+  def process_favorites
+    loop do
+      since_id = favorite_ids.max || 1
+      new_favorite_ids = client
+                         .favorites(client.user, since_id: since_id)
+                         .map(&:id)
+
+      break if new_favorite_ids.empty?
+
+      favorite_ids.push(*new_favorite_ids)
+    rescue Twitter::Error::TooManyRequests => error
+      time = error.rate_limit.reset_in + 1
+      puts "=> Error: too many requests (wait #{time}s)"
+      sleep error.rate_limit.reset_in + 1
+      retry
+    end
+  end
+
   def process_tweet(tweet)
     tweet_ids << tweet.id
 
-    return if keybase_verification_id.to_i == tweet.id
+    return if favorite_ids.include?(tweet.id)
     return if tweet.created_at > Time.now.utc - tweet_ttl
 
     client.destroy_status(tweet)
@@ -92,6 +109,10 @@ class TwitterCleanup
 
   def tweet_ids
     @tweet_ids ||= []
+  end
+
+  def favorite_ids
+    @favorite_ids ||= []
   end
 end
 
